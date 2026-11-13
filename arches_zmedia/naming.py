@@ -5,8 +5,6 @@ uploadedfiles/<file>   legacy or tile-less; spec looked up per name
 """
 
 import os
-from functools import lru_cache
-
 from django.core.exceptions import ObjectDoesNotExist
 
 PREFIX = "zmedia/"
@@ -32,10 +30,15 @@ def zmedia_key(name):
     return (spec, rel) if spec and rel else None
 
 
-# ponytail: per-process cache; a graph slug rename needs a pod restart
-@lru_cache(maxsize=65536)
+# ponytail: per-process, slugs only (a file without a row or tile may get one
+# any moment); a graph slug rename needs a pod restart
+_found = {}
+
+
 def legacy_spec(name):
     """Graph slug of the File row named `name`, UNLINKED without a tile, None without a row."""
+    if name in _found:
+        return _found[name]
     from arches.app.models.models import File
 
     rows = list(
@@ -43,4 +46,7 @@ def legacy_spec(name):
     )
     if not rows:
         return None
-    return rows[0] or UNLINKED
+    if not rows[0]:
+        return UNLINKED
+    _found[name] = rows[0]
+    return rows[0]

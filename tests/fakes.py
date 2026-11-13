@@ -29,6 +29,21 @@ class FakeSFTP:
         with open(local, "rb") as fh:
             self.putfo(fh, p)
 
+    def posix_rename(self, old, new):
+        self.files[new] = self.files.pop(old)
+
+    def remove(self, p):
+        del self.files[p]
+
+    def listdir_attr(self, p):
+        if p not in self.dirs:
+            raise FileNotFoundError(p)
+        return [
+            SimpleNamespace(filename=k.rsplit("/", 1)[1], st_size=len(v))
+            for k, v in self.files.items()
+            if k.rsplit("/", 1)[0] == p
+        ]
+
     def listdir(self, p):
         if p not in self.dirs:
             raise FileNotFoundError(p)
