@@ -30,14 +30,26 @@ def _expected(do, pattern):
     return pattern.format(identifier=n, name=do.name), None
 
 
-def match(dos, inventory, pattern):
+def image_tileid(resourceid):
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia-image:{resourceid}"))
+
+
+def has_foreign_image(resourceid, tileids):
+    """True when the resource has an image tile that is not the one zmedia_link writes."""
+    ours = image_tileid(resourceid)
+    return any(t != ours for t in tileids)
+
+
+def match(dos, inventory, pattern, partial=False):
+    """partial: the inventory holds only changed rows, so a missing file is not a finding."""
     unmatched, wanted = [], {}
     for do in dos:
+        rel, reason = _expected(do, pattern)
+        if partial and not reason and rel not in inventory:
+            continue
         if do.has_image:
             unmatched.append(("do", do.resourceid, "has an image already"))
-            continue
-        rel, reason = _expected(do, pattern)
-        if reason:
+        elif reason:
             unmatched.append(("do", do.resourceid, reason))
         elif rel not in inventory:
             unmatched.append(("do", do.resourceid, "file not found"))
@@ -66,7 +78,7 @@ def file_value(org, spec, row):
 
 def image_line(do, graphid, nodegroupid, nodeid, value):
     """One loader JSONL line: the resource with only its image tile (load with delta_sync('tile'))."""
-    tileid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia-image:{do.resourceid}"))
+    tileid = image_tileid(do.resourceid)
     return json.dumps({
         "resourceInstanceID": do.resourceid, "graphID": graphid,
         "tiles": [{"tileid": tileid, "nodegroup_id": nodegroupid, "parenttile_id": None, "sortorder": 0,

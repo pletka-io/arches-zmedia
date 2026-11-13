@@ -27,7 +27,7 @@ SELECT ri.resourceinstanceid::text,
          WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.tiledata ? %(ident)s LIMIT 1),
        (SELECT v->>'value' FROM tiles t, jsonb_each(t.tiledata->%(name)s) x(l, v)
          WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.tiledata ? %(name)s LIMIT 1),
-       EXISTS (SELECT 1 FROM tiles t WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.nodegroupid = %(image_ng)s::uuid)
+       ARRAY(SELECT t.tileid::text FROM tiles t WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.nodegroupid = %(image_ng)s::uuid)
   FROM resource_instances ri
  WHERE ri.graphid = %(graph)s::uuid
  ORDER BY 1
@@ -63,12 +63,9 @@ class Command(BaseCommand):
         with connection.cursor() as c:
             c.execute(_DO_SQL, {"ident": str(nodes[identifier_node].nodeid), "name": str(nodes[name_node].nodeid),
                                 "image_ng": str(image.nodegroup_id), "graph": str(image.graph_id)})
-            dos = [link.Do(*row) for row in c.fetchall()]
-        if since:
-            # an incremental run only re-links Digital Objects whose file changed; their earlier
-            # image tile is ours, so it does not count as "has an image already"
-            dos = [d._replace(has_image=False) for d in dos]
-        pairs, unmatched = link.match(dos, inventory, pattern)
+            # has_image: an image tile that is not ours (our own earlier tile does not count)
+            dos = [link.Do(rid, ident, name, link.has_foreign_image(rid, tileids)) for rid, ident, name, tileids in c.fetchall()]
+        pairs, unmatched = link.match(dos, inventory, pattern, partial=bool(since))
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "link.jsonl"), "w") as f:
             for do, row in pairs:
