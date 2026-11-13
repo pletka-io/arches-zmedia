@@ -80,7 +80,12 @@ tiles and the delta is empty. The exact set of keys follows what Arches 8.1
 writes for an uploaded file; the plan copies them from a tile the UI made.
 
 With `--since`, only Digital Objects whose file changed or was deleted are
-written; a deleted file's Digital Object gets an empty `image` tile.
+written. A deleted file clears the `image` tile only where that tile is the
+one `zmedia_link` wrote; otherwise it is reported as "file deleted". A broken
+file is reported, not linked. An `image` tile someone edited by hand (any value
+that is not one `zmedia_link` would write) counts as theirs and is never
+overwritten. The gallery and header sort identifiers in natural numeric order
+(`natural=true` on the related-resources endpoint).
 
 Errors stop the command before any output is written: inventory `401`/`403`,
 an unreadable inventory, a graph without the named nodes.
