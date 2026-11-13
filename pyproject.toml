@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arches-zmedia"
+version = "0.1.0"
+description = "Arches uploads on zmedia (media.delving.org): storage backend and filename generator"
+license = { text = "AGPL-3.0-only" }
+requires-python = ">=3.11"
+dependencies = ["Django>=5.2", "paramiko>=3.4"]
+
+[tool.setuptools.packages.find]
+include = ["arches_zmedia*"]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "tests"]
