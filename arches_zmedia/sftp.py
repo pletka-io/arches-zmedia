@@ -46,7 +46,15 @@ def ensure_dir(s, path):
 
 
 def listdir(s, path):
+    """{name: size} of a directory; empty when it does not exist."""
     try:
-        return set(s.listdir(path))
+        return {a.filename: a.st_size for a in s.listdir_attr(path)}
     except FileNotFoundError:
-        return set()
+        return {}
+
+
+def upload(s, local, target):
+    """Put a file so that ingest never sees it half written: .part, then rename."""
+    part = f"{target.rsplit('/', 1)[0]}/.{target.rsplit('/', 1)[1]}.part"
+    s.put(local, part)
+    s.posix_rename(part, target)

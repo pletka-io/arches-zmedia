@@ -26,13 +26,18 @@ class Command(BaseCommand):
         with sftp.connect(cfg) as s:
             specs = {spec or naming.UNLINKED for _, spec in rows}
             remote = {spec: sftp.listdir(s, f"/{cfg['ORG']}/{spec}") for spec in specs}
-            todo, missing = plan_push(rows, remote, local.path)
-            self.stdout.write(f"{len(rows)} rows, {len(todo)} to upload, {len(missing)} missing on disk")
+            todo, missing, conflicts = plan_push(rows, remote, local.path)
+            self.stdout.write(
+                f"{len(rows)} rows, {len(todo)} to upload, {len(missing)} missing, "
+                f"{len(conflicts)} conflicts (zmedia holds a different file by that name; not touched)"
+            )
             for name in missing[:20]:
                 self.stdout.write(f"missing: {name}")
+            for name in conflicts:
+                self.stdout.write(f"conflict: {name}")
             for path, spec, rel in todo:
                 target = remote_path(cfg, spec, rel)
                 self.stdout.write(("would upload " if dry_run else "upload ") + target)
                 if not dry_run:
                     sftp.ensure_dir(s, f"/{cfg['ORG']}/{spec}")
-                    s.put(path, target)
+                    sftp.upload(s, path, target)
