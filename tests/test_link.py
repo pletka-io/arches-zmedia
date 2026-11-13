@@ -69,3 +69,26 @@ def test_link_lines_are_deterministic():
     assert tile["tileid"] == str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia-image:{do.resourceid}"))
     assert tile["nodegroup_id"] == "ng" and tile["data"] == {"n": [v]}
     assert image_line(do, "g", "ng", "n", None).count('"n": []') == 1  # deleted file: empty list
+
+
+def test_image_tileid_is_the_one_image_line_uses():
+    from arches_zmedia.link import image_tileid
+    do = Do("11111111-1111-1111-1111-111111111111", "1", "a.jpg", False)
+    assert json.loads(image_line(do, "g", "ng", "n", None))["tiles"][0]["tileid"] == image_tileid(do.resourceid)
+
+
+def test_has_foreign_image():
+    from arches_zmedia.link import has_foreign_image, image_tileid
+    rid = "11111111-1111-1111-1111-111111111111"
+    assert not has_foreign_image(rid, [])
+    assert not has_foreign_image(rid, [image_tileid(rid)])
+    assert has_foreign_image(rid, ["other"])
+    assert has_foreign_image(rid, [image_tileid(rid), "other"])
+
+
+def test_partial_skips_missing_files_silently():
+    dos = [Do("r1", "1", "DSC_0284.JPG", False), Do("r6", "7", "nope.jpg", False), Do("r7", "8", "nope.jpg", True),
+           Do("r3", "5", "", False)]
+    pairs, unmatched = match(dos, INV, P, partial=True)
+    assert ids(pairs) == ["r1"]
+    assert [u for u in unmatched if u[0] == "do"] == [("do", "r3", "empty name")]

@@ -31,3 +31,8 @@ Matches each Digital Object of graph `<spec>` to a file in the zmedia inventory
 writes `link.jsonl` (one image tile per match), `unmatched.tsv` and `cursor`
 to `<dir>`. Load `link.jsonl` with `delta_sync('tile')`; tile mode never
 deletes tiles. Pass the saved cursor as `--since` for an incremental run.
+
+A full run can be repeated: a Digital Object linked earlier matches again and
+gets an identical line; one with a hand-uploaded image is left alone. In an
+incremental run (`--since`) the inventory holds only changed files, so
+`unmatched.tsv` lists only problems among those files.
