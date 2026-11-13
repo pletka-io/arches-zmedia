@@ -3,7 +3,9 @@
 Date: 2026-11-13
 Status: draft, for review
 Depends on: zmedia inventory API (kakugo spec
-`2026-11-13-zmedia-inventory-design.md`): `GET /api/inventory/<org>/<spec>`.
+`2026-11-13-zmedia-inventory-design.md`): `GET /api/inventory/<org>/<spec>` on
+dash, reachable from the Arches host over WireGuard with an app token bound to
+the instance's org.
 
 ## 1. Goal
 
@@ -43,9 +45,11 @@ manage.py zmedia_link digital_object \
     --out <dir> [--since <cursor>]
 ```
 
-1. Reads `/api/inventory/<org>/digital_object` from zmedia (`ZMEDIA["BASE_URL"]`,
-   `ZMEDIA["ORG"]`, bearer token from `ZMEDIA_INVENTORY_TOKEN` in the
-   instance env), zstd-encoded, streamed.
+1. Reads `/api/inventory/<org>/digital_object` from dash
+   (`ZMEDIA["INVENTORY_URL"]`, set per host in the instance settings;
+   `ZMEDIA["ORG"]`; bearer token from `/etc/arches/<slug>/zmedia-inventory.token`,
+   read by `conf.settings(org)` like the SFTP key), zstd-encoded (concatenated
+   frames), streamed.
 2. Reads every Digital Object's identifier and name from the database.
 3. Builds the expected file name per Digital Object from `--pattern` and
    matches it against the inventory's `rel`.
