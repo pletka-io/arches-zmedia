@@ -13,6 +13,10 @@ INV = read_inventory(json.dumps(r).encode() + b"\n" for r in ROWS)
 P = "{identifier:06d}_{name}"
 
 
+def dos_only(unmatched):
+    return [u for u in unmatched if u[0] == "do"]
+
+
 def ids(pairs):
     return sorted(d.resourceid for d, _ in pairs)
 
@@ -44,9 +48,30 @@ def test_match_two_digital_objects_one_file():
     assert {("do", "r1", "duplicate: 000001_DSC_0284.JPG"), ("do", "r8", "duplicate: 000001_DSC_0284.JPG")} <= set(unmatched)
 
 
-def test_deleted_file_matches_and_gives_an_empty_value():
-    pairs, _ = match([Do("r9", "4", "gone.jpg", False)], INV, P)
-    assert pairs[0][1]["status"] == "deleted"
+def test_deleted_file_clears_our_tile():
+    pairs, unmatched = match([Do("r9", "4", "gone.jpg", False, True)], INV, P)
+    assert pairs[0][1]["status"] == "deleted" and dos_only(unmatched) == []
+
+
+def test_deleted_file_without_our_tile_is_reported_not_linked():
+    pairs, unmatched = match([Do("r9", "4", "gone.jpg", False)], INV, P)
+    assert pairs == []
+    assert dos_only(unmatched) == [("do", "r9", "file deleted")]
+
+
+def test_deleted_file_in_since_mode_clears_our_tile_only():
+    dos = [Do("r9", "4", "gone.jpg", False, True), Do("r10", "4", "gone.jpg", False)]
+    pairs, unmatched = match(dos, INV, P, partial=True)
+    assert ids(pairs) == ["r9"]
+    assert dos_only(unmatched) == [("do", "r10", "file deleted")]
+
+
+def test_broken_file_is_reported_not_linked():
+    broken = dict(ROWS[1], status="broken")
+    inv = read_inventory([json.dumps(broken).encode()])
+    for partial in (False, True):
+        pairs, unmatched = match([Do("r2", "2", "b.jpg", False, True)], inv, P, partial=partial)
+        assert pairs == [] and unmatched == [("do", "r2", "file broken")]  # not also "no digital object"
 
 
 def test_file_value_and_deterministic_ids():
@@ -80,10 +105,28 @@ def test_image_tileid_is_the_one_image_line_uses():
 def test_has_foreign_image():
     from arches_zmedia.link import has_foreign_image, image_tileid
     rid = "11111111-1111-1111-1111-111111111111"
-    assert not has_foreign_image(rid, [])
-    assert not has_foreign_image(rid, [image_tileid(rid)])
-    assert has_foreign_image(rid, ["other"])
-    assert has_foreign_image(rid, [image_tileid(rid), "other"])
+    ours = image_tileid(rid)
+    v = file_value("gap", "digital_object", INV["000001_DSC_0284.JPG"])
+    assert not has_foreign_image(rid, {}, "gap", "digital_object")
+    assert not has_foreign_image(rid, {ours: [v]}, "gap", "digital_object")
+    assert not has_foreign_image(rid, {ours: []}, "gap", "digital_object")
+    assert not has_foreign_image(rid, {ours: None}, "gap", "digital_object")
+    assert has_foreign_image(rid, {"other": None}, "gap", "digital_object")
+    assert has_foreign_image(rid, {ours: [v], "other": [v]}, "gap", "digital_object")
+
+
+def test_our_tile_edited_in_the_ui_counts_as_foreign():
+    from arches_zmedia.link import has_foreign_image, image_tileid
+    rid = "11111111-1111-1111-1111-111111111111"
+    ours = image_tileid(rid)
+    v = file_value("gap", "digital_object", INV["000001_DSC_0284.JPG"])
+    uploaded = {"file_id": "22222222-2222-2222-2222-222222222222", "path": "uploadedfiles/x.jpg", "name": "x.jpg"}
+    assert has_foreign_image(rid, {ours: [v, uploaded]}, "gap", "digital_object")
+    assert has_foreign_image(rid, {ours: [dict(v, path="uploadedfiles/x.jpg")]}, "gap", "digital_object")
+    assert has_foreign_image(rid, {ours: [dict(v, file_id=uploaded["file_id"])]}, "gap", "digital_object")
+    assert has_foreign_image(rid, {ours: [dict(v, path="zmedia/other_spec/000001_DSC_0284.JPG")]}, "gap", "digital_object")
+    assert has_foreign_image(rid, {ours: [v]}, "other_org", "digital_object")
+    assert has_foreign_image(rid, {ours: [{"name": "x.jpg"}]}, "gap", "digital_object")
 
 
 def test_partial_skips_missing_files_silently():
