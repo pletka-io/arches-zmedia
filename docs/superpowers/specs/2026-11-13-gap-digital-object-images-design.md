@@ -66,7 +66,7 @@ The file value in the tile:
 {"file_id": "<uuid5(NAMESPACE_URL, 'zmedia:gap/digital_object/000001_DSC_0284.JPG')>",
  "name": "000001_DSC_0284.JPG",
  "path": "zmedia/digital_object/000001_DSC_0284.JPG",
- "url": "https://media.delving.org/thumbnail/gap/digital_object/000001_DSC_0284.JPG/1000",
+ "url": "/files/<file_id>",
  "size": 5123456, "type": "image/jpeg",
  "status": "uploaded", "accepted": true}
 ```
@@ -102,19 +102,42 @@ Change in `sync_delta.sql`, both paths:
 Run `delta preview` before `delta_sync`. Expected on GAP: about 18k `image`
 tiles added on existing Digital Objects, 0 resources deleted.
 
-## 4. Thumbnails at the right size
+## 4. Derivatives through the storage backend
 
-zmedia makes the thumbnails; Arches does not (`GENERATE_THUMBNAILS_ON_DEMAND`
-stays off: turning it on would pull every original over SFTP to store a PNG
-in the database). A zmedia thumbnail URL ends in its size,
-`<BASE_URL>/thumbnail/<org>/<spec>/<rel>/<size>`, so a caller picks the size
-by changing that suffix.
+zmedia makes every derivative: thumbnails at any size
+(`/thumbnail/<org>/<spec>/<rel>/<size>`), deepzoom, and the IIIF Image API
+(`/iiif/{2|3}/<org>~<spec>~<rel>/...`, kakugo spec
+`2026-10-24-iiif-image-api-design.md` §3.1). Arches does not
+(`GENERATE_THUMBNAILS_ON_DEMAND` stays off: turning it on would pull every
+original over SFTP to store a PNG in the database).
 
-`zmedia_link` writes that URL (size 1000, the storage's `SIZE`) as the file
-value's `url`, instead of `/files/<file_id>`. The gallery and the header
-replace the trailing size: 300 in the grid, 1000 in the header. A file value
-whose `url` has no numeric suffix (files uploaded through the UI keep
-`/files/<id>`) is shown as is.
+`ZmediaStorage` names them, so nothing outside the storage knows zmedia's URL
+shapes:
+
+```python
+storage.url(name)                          # thumbnail at ZMEDIA["SIZE"] (1000), as in v0.1.0
+storage.derivative_url(name, "thumbnail", size=300)
+storage.derivative_url(name, "iiif")       # IIIF Image API v3 service base, no trailing slash
+```
+
+`derivative_url` raises `ValueError` for an unknown kind, and for a name
+outside `zmedia/` (a legacy local file has no derivatives).
+
+File values keep Arches' own `url`, `/files/<file_id>`, the same as files
+uploaded through the UI. arches-zmedia adds a `FileView` subclass, routed at
+`files/<uuid>` ahead of Arches' own (the project adds one URL line). It keeps
+Arches' permission checks unchanged and changes only where it redirects:
+
+- `?thumbnail=true` → `derivative_url(name, "thumbnail", ZMEDIA["THUMB_SIZE"])`
+  (default 300);
+- `?size=<n>` → `derivative_url(name, "thumbnail", n)`, `n` limited to
+  `ZMEDIA["SIZES"]` (default 100, 300, 500, 1000) so a caller cannot ask for
+  arbitrary sizes;
+- no parameter → `storage.url(name)`, as today;
+- a file not on zmedia → Arches' own behaviour.
+
+The `iiif` kind has no caller in this spec; the record manifest (next spec)
+uses it for each canvas's image service.
 
 ## 5. Display (fork pletka-io/arches-modular-reports)
 
@@ -133,7 +156,7 @@ New report component, configured as:
   directions and pages them, with `node_aliases=image,identifier_content`.
   For a file-list node it already returns `links` with `is_file` and `url`
   (`app/utils/nodegroup_tile_data_utils.py:639`). No backend change.
-- A grid of thumbnails (the `url` with its size suffix set to 300, §4), each linking to its Digital
+- A grid of thumbnails (`<url>?thumbnail=true`, §4), each linking to its Digital
   Object report, with the Digital Object's name as caption, and a pager.
 - A Digital Object without an image is left out of the grid.
 - No related Digital Objects: the section is hidden.
@@ -167,11 +190,15 @@ Automated:
   name, `.heic` without a Digital Object, two Digital Objects expecting one
   file, `--since` with a deleted file; the same input twice gives
   byte-identical `link.jsonl`.
+- arches-zmedia storage: `derivative_url` for thumbnail and iiif (percent
+  encoding of `rel` with spaces and `~`), unknown kind and legacy name raise.
+- arches-zmedia view: `thumbnail=true` → `THUMB_SIZE`; `size=500` → 500;
+  `size=7` → Arches' default redirect; legacy file → Arches' behaviour;
+  a forbidden file still `403`.
 - archessql: SQL tests for the `files` upsert, a reload that keeps an
   unchanged file's row, a reload that drops a removed `file_id`, and a
   file-list value without `path` keeping its row.
-- Fork (vitest): section empty, paged, sorted by identifier; size suffix
-  swapped on a zmedia URL, `/files/<id>` left as is; tombstone
+- Fork (vitest): section empty, paged, sorted by identifier; tombstone
   fallback used only when the record's own image is empty.
 
 Acceptance on GAP:
