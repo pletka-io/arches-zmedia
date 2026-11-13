@@ -21,13 +21,19 @@ def _inventory(cfg, spec, since):
         return link.read_inventory(resp), resp.headers.get("X-Zmedia-Cursor", "")
 
 
-_DO_SQL = """
+# One string value per node, the same on every run: English first, then by language,
+# tile sortorder and tileid; empty values skipped.
+_FIRST_VALUE = """(SELECT v->>'value' FROM tiles t, jsonb_each(t.tiledata->%({key})s) x(l, v)
+         WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.tiledata ? %({key})s
+           AND COALESCE(v->>'value', '') <> ''
+         ORDER BY (x.l = 'en') DESC, x.l, t.sortorder, t.tileid LIMIT 1)"""
+
+_DO_SQL = f"""
 SELECT ri.resourceinstanceid::text,
-       (SELECT v->>'value' FROM tiles t, jsonb_each(t.tiledata->%(ident)s) x(l, v)
-         WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.tiledata ? %(ident)s LIMIT 1),
-       (SELECT v->>'value' FROM tiles t, jsonb_each(t.tiledata->%(name)s) x(l, v)
-         WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.tiledata ? %(name)s LIMIT 1),
-       ARRAY(SELECT t.tileid::text FROM tiles t WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.nodegroupid = %(image_ng)s::uuid)
+       {_FIRST_VALUE.format(key="ident")},
+       {_FIRST_VALUE.format(key="name")},
+       (SELECT COALESCE(jsonb_object_agg(t.tileid::text, t.tiledata->%(image)s), '{{}}'::jsonb)
+          FROM tiles t WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.nodegroupid = %(image_ng)s::uuid)
   FROM resource_instances ri
  WHERE ri.graphid = %(graph)s::uuid
  ORDER BY 1
@@ -62,9 +68,12 @@ class Command(BaseCommand):
         inventory, cursor = _inventory(cfg, spec, since)  # fails before anything is written
         with connection.cursor() as c:
             c.execute(_DO_SQL, {"ident": str(nodes[identifier_node].nodeid), "name": str(nodes[name_node].nodeid),
-                                "image_ng": str(image.nodegroup_id), "graph": str(image.graph_id)})
-            # has_image: an image tile that is not ours (our own earlier tile does not count)
-            dos = [link.Do(rid, ident, name, link.has_foreign_image(rid, tileids)) for rid, ident, name, tileids in c.fetchall()]
+                                "image": str(image.nodeid), "image_ng": str(image.nodegroup_id),
+                                "graph": str(image.graph_id)})
+            # has_image: an image tile we did not write, or ours edited since (our own unedited tile does not count)
+            dos = [link.Do(rid, ident, name, link.has_foreign_image(rid, tiles, cfg["ORG"], spec),
+                           link.image_tileid(rid) in tiles)
+                   for rid, ident, name, tiles in c.fetchall()]
         pairs, unmatched = link.match(dos, inventory, pattern, partial=bool(since))
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "link.jsonl"), "w") as f:
@@ -77,4 +86,7 @@ class Command(BaseCommand):
         with open(os.path.join(out, "cursor"), "w") as f:
             f.write(cursor)
         do_unmatched = sum(1 for u in unmatched if u[0] == "do")
-        self.stdout.write(f"matched {len(pairs)}; digital objects unmatched {do_unmatched}; files unmatched {len(unmatched) - do_unmatched}; cursor {cursor}")
+        cleared = sum(1 for _, row in pairs if row["status"] == "deleted")
+        self.stdout.write(f"matched {len(pairs) - cleared}; cleared (file deleted) {cleared}; "
+                          f"digital objects unmatched {do_unmatched}; files unmatched {len(unmatched) - do_unmatched}; "
+                          f"cursor {cursor}")

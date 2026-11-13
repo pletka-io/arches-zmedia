@@ -4,7 +4,8 @@ import json
 import uuid
 from collections import namedtuple
 
-Do = namedtuple("Do", "resourceid identifier name has_image")
+# has_image: an image tile zmedia_link did not write; has_ours: the tile it did write
+Do = namedtuple("Do", "resourceid identifier name has_image has_ours", defaults=(False,))
 IMAGE_RENDERER = "5e05aa2e-5db0-4922-8938-b4d2b7919733"
 
 
@@ -34,15 +35,30 @@ def image_tileid(resourceid):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia-image:{resourceid}"))
 
 
-def has_foreign_image(resourceid, tileids):
-    """True when the resource has an image tile that is not the one zmedia_link writes."""
+def file_id(org, spec, rel):
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia:{org}/{spec}/{rel}"))
+
+
+def _is_our_value(value, org, spec):
+    """Every file in the image node is one zmedia_link would write (a UI edit adds or changes one)."""
+    prefix = f"zmedia/{spec}/"
+    for f in value or []:
+        path = f.get("path") if isinstance(f, dict) else None
+        if not path or not path.startswith(prefix) or f.get("file_id") != file_id(org, spec, path[len(prefix):]):
+            return False
+    return True
+
+
+def has_foreign_image(resourceid, tiles, org, spec):
+    """True when the resource has an image tile zmedia_link did not write, or our tile was
+    edited since. tiles: {tileid: the image node's value in that tile}."""
     ours = image_tileid(resourceid)
-    return any(t != ours for t in tileids)
+    return any(t != ours or not _is_our_value(v, org, spec) for t, v in tiles.items())
 
 
 def match(dos, inventory, pattern, partial=False):
     """partial: the inventory holds only changed rows, so a missing file is not a finding."""
-    unmatched, wanted = [], {}
+    unmatched, wanted, broken = [], {}, set()
     for do in dos:
         rel, reason = _expected(do, pattern)
         if partial and not reason and rel not in inventory:
@@ -53,7 +69,12 @@ def match(dos, inventory, pattern, partial=False):
             unmatched.append(("do", do.resourceid, reason))
         elif rel not in inventory:
             unmatched.append(("do", do.resourceid, "file not found"))
-        else:
+        elif inventory[rel]["status"] == "broken":
+            unmatched.append(("do", do.resourceid, "file broken"))
+            broken.add(rel)
+        elif inventory[rel]["status"] == "deleted" and not do.has_ours:
+            unmatched.append(("do", do.resourceid, "file deleted"))
+        else:  # a deleted file with our tile: the pair writes an empty tile to clear it
             wanted.setdefault(rel, []).append(do)
     pairs = []
     for rel, group in wanted.items():
@@ -61,14 +82,14 @@ def match(dos, inventory, pattern, partial=False):
             unmatched += [("do", d.resourceid, f"duplicate: {rel}") for d in group]
         else:
             pairs.append((group[0], inventory[rel]))
-    used = set(wanted)
+    used = set(wanted) | broken
     unmatched += [("file", rel, "no digital object") for rel, row in inventory.items() if rel not in used and row["status"] != "deleted"]
     return pairs, sorted(unmatched)
 
 
 def file_value(org, spec, row):
     rel = row["rel"]
-    fid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia:{org}/{spec}/{rel}"))
+    fid = file_id(org, spec, rel)
     return {
         "file_id": fid, "name": rel, "path": f"zmedia/{spec}/{rel}", "url": f"/files/{fid}",
         "size": row["size"], "type": row["mime"], "status": "uploaded", "accepted": True,

@@ -33,6 +33,9 @@ to `<dir>`. Load `link.jsonl` with `delta_sync('tile')`; tile mode never
 deletes tiles. Pass the saved cursor as `--since` for an incremental run.
 
 A full run can be repeated: a Digital Object linked earlier matches again and
-gets an identical line; one with a hand-uploaded image is left alone. In an
-incremental run (`--since`) the inventory holds only changed files, so
+gets an identical line; one with a hand-uploaded image, or whose linked tile
+was edited by hand since, is left alone. A file deleted on zmedia clears the
+tile linked earlier (an empty image tile) and is otherwise listed as
+`file deleted`; a file zmedia marks broken is listed as `file broken` and not
+linked. In an incremental run (`--since`) the inventory holds only changed files, so
 `unmatched.tsv` lists only problems among those files.
