@@ -5,7 +5,7 @@ import uuid
 from collections import namedtuple
 
 # has_image: an image tile zmedia_link did not write; has_ours: the tile it did write
-Do = namedtuple("Do", "resourceid identifier name has_image has_ours", defaults=(False,))
+Do = namedtuple("Do", "resourceid identifier names has_image has_ours", defaults=(False,))
 IMAGE_RENDERER = "5e05aa2e-5db0-4922-8938-b4d2b7919733"
 
 
@@ -19,16 +19,21 @@ def read_inventory(lines):
     return rows
 
 
-def _expected(do, pattern):
-    if not do.name:
+def _expected(do, pattern, inventory):
+    """The rel for the first name value whose file is in the inventory; else the first usable one."""
+    names = (do.names,) if isinstance(do.names, str) else do.names or ()
+    names = [n for n in names if n]
+    if not names:
         return None, "empty name"
-    if "/" in do.name:
+    usable = [n for n in names if "/" not in n]
+    if not usable:
         return None, "name with a slash"
     try:
         n = int(do.identifier)
     except (TypeError, ValueError):
         return None, "identifier not a number"
-    return pattern.format(identifier=n, name=do.name), None
+    rels = [pattern.format(identifier=n, name=name) for name in usable]
+    return next((r for r in rels if r in inventory), rels[0]), None
 
 
 def image_tileid(resourceid):
@@ -39,9 +44,15 @@ def file_id(org, spec, rel):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia:{org}/{spec}/{rel}"))
 
 
+def _json(value):
+    """Django has psycopg return json/jsonb columns as str; accept that or the parsed value."""
+    return json.loads(value) if isinstance(value, str) else value
+
+
 def _is_our_value(value, org, spec):
     """Every file in the image node is one zmedia_link would write (a UI edit adds or changes one)."""
     prefix = f"zmedia/{spec}/"
+    value = _json(value)
     for f in value or []:
         path = f.get("path") if isinstance(f, dict) else None
         if not path or not path.startswith(prefix) or f.get("file_id") != file_id(org, spec, path[len(prefix):]):
@@ -53,14 +64,18 @@ def has_foreign_image(resourceid, tiles, org, spec):
     """True when the resource has an image tile zmedia_link did not write, or our tile was
     edited since. tiles: {tileid: the image node's value in that tile}."""
     ours = image_tileid(resourceid)
-    return any(t != ours or not _is_our_value(v, org, spec) for t, v in tiles.items())
+    return any(t != ours or not _is_our_value(v, org, spec) for t, v in (_json(tiles) or {}).items())
+
+
+def has_our_tile(resourceid, tiles):
+    return image_tileid(resourceid) in (_json(tiles) or {})
 
 
 def match(dos, inventory, pattern, partial=False):
     """partial: the inventory holds only changed rows, so a missing file is not a finding."""
     unmatched, wanted, broken = [], {}, set()
     for do in dos:
-        rel, reason = _expected(do, pattern)
+        rel, reason = _expected(do, pattern, inventory)
         if partial and not reason and rel not in inventory:
             continue
         if do.has_image:

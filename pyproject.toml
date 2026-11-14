@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arches-zmedia"
-version = "0.2.0"
+version = "0.2.1"
 description = "Arches uploads on zmedia (media.delving.org): storage backend and filename generator"
 license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.11"
