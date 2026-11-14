@@ -157,3 +157,25 @@ def test_partial_skips_missing_files_silently():
     pairs, unmatched = match(dos, INV, P, partial=True)
     assert ids(pairs) == ["r1"]
     assert [u for u in unmatched if u[0] == "do"] == [("do", "r3", "empty name")]
+
+
+def test_every_name_value_is_a_candidate():
+    dos = [Do("r1", "1", ("Photograph Unit 1090 (DSC_0284.JPG)", "DSC_0284.JPG"), False),
+           Do("r2", "2", ("DSC/odd title", "Photo (b.jpg)"), False),
+           Do("r3", "3", ("a/b", "c/d"), False),
+           Do("r4", "7", ("Title for nope.jpg", "nope.jpg"), False),
+           Do("r5", "8", ("", ""), False),
+           Do("r6", "2", ("b.jpg", "x"), False)]
+    pairs, unmatched = match(dos, INV, P)
+    assert ids(pairs) == ["r1", "r6"]
+    assert dos_only(unmatched) == [("do", "r2", "file not found"), ("do", "r3", "name with a slash"),
+                                   ("do", "r4", "file not found"), ("do", "r5", "empty name")]
+
+
+def test_candidate_order_is_deterministic(tmp_path):
+    from arches_zmedia.link import image_line
+    names = ("Title (DSC_0284.JPG)", "DSC_0284.JPG")
+    def run():
+        pairs, _ = match([Do("11111111-1111-1111-1111-111111111111", "1", names, False)], INV, P)
+        return [image_line(d, "g", "ng", "n", file_value("gap", "digital_object", row)) for d, row in pairs]
+    assert run() == run() != []

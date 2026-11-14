@@ -5,7 +5,7 @@ import uuid
 from collections import namedtuple
 
 # has_image: an image tile zmedia_link did not write; has_ours: the tile it did write
-Do = namedtuple("Do", "resourceid identifier name has_image has_ours", defaults=(False,))
+Do = namedtuple("Do", "resourceid identifier names has_image has_ours", defaults=(False,))
 IMAGE_RENDERER = "5e05aa2e-5db0-4922-8938-b4d2b7919733"
 
 
@@ -19,16 +19,21 @@ def read_inventory(lines):
     return rows
 
 
-def _expected(do, pattern):
-    if not do.name:
+def _expected(do, pattern, inventory):
+    """The rel for the first name value whose file is in the inventory; else the first usable one."""
+    names = (do.names,) if isinstance(do.names, str) else do.names or ()
+    names = [n for n in names if n]
+    if not names:
         return None, "empty name"
-    if "/" in do.name:
+    usable = [n for n in names if "/" not in n]
+    if not usable:
         return None, "name with a slash"
     try:
         n = int(do.identifier)
     except (TypeError, ValueError):
         return None, "identifier not a number"
-    return pattern.format(identifier=n, name=do.name), None
+    rels = [pattern.format(identifier=n, name=name) for name in usable]
+    return next((r for r in rels if r in inventory), rels[0]), None
 
 
 def image_tileid(resourceid):
@@ -70,7 +75,7 @@ def match(dos, inventory, pattern, partial=False):
     """partial: the inventory holds only changed rows, so a missing file is not a finding."""
     unmatched, wanted, broken = [], {}, set()
     for do in dos:
-        rel, reason = _expected(do, pattern)
+        rel, reason = _expected(do, pattern, inventory)
         if partial and not reason and rel not in inventory:
             continue
         if do.has_image:
