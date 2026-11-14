@@ -19,3 +19,23 @@ so a dev checkout keeps files on disk.
 
 `python manage.py zmedia_push [--dry-run]` uploads legacy files zmedia lacks.
 Deleting a file in Arches keeps the original on zmedia.
+
+## Linking existing files
+
+    python manage.py zmedia_link <spec> --pattern "{identifier:06d}_{name}" \
+        --identifier-node <alias> --name-node <alias> --image-node <alias> \
+        --out <dir> [--since <cursor>]
+
+Matches each Digital Object of graph `<spec>` to a file in the zmedia inventory
+(file name from `--pattern`, filled with the object's identifier and name) and
+writes `link.jsonl` (one image tile per match), `unmatched.tsv` and `cursor`
+to `<dir>`. Load `link.jsonl` with `delta_sync('tile')`; tile mode never
+deletes tiles. Pass the saved cursor as `--since` for an incremental run.
+
+A full run can be repeated: a Digital Object linked earlier matches again and
+gets an identical line; one with a hand-uploaded image, or whose linked tile
+was edited by hand since, is left alone. A file deleted on zmedia clears the
+tile linked earlier (an empty image tile) and is otherwise listed as
+`file deleted`; a file zmedia marks broken is listed as `file broken` and not
+linked. In an incremental run (`--since`) the inventory holds only changed files, so
+`unmatched.tsv` lists only problems among those files.

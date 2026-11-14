@@ -38,6 +38,23 @@ class ZmediaStorage(FileSystemStorage):
         spec, rel = key
         return f"{cfg['BASE_URL']}/thumbnail/{cfg['ORG']}/{spec}/{quote(rel, safe='')}/{cfg.get('SIZE', 1000)}"
 
+    def derivative_url(self, name, kind, size=None):
+        """A zmedia derivative of a zmedia-held file (spec §4). Legacy local files have none."""
+        key = naming.zmedia_key(name)
+        if key is None:
+            raise ValueError(f"not on zmedia: {name}")
+        spec, rel = key
+        cfg = settings.ZMEDIA
+        if kind == "thumbnail":
+            if size is None:
+                raise ValueError("a thumbnail needs a size")
+            return f"{cfg['BASE_URL']}/thumbnail/{cfg['ORG']}/{spec}/{quote(rel, safe='')}/{int(size)}"
+        if kind == "iiif":
+            # zmedia's IIIF identifier is org~spec~id; a `~` inside the id must not read as a separator
+            ident = quote(rel, safe="").replace("~", "%7E")
+            return f"{cfg['BASE_URL']}/iiif/3/{cfg['ORG']}~{spec}~{ident}"
+        raise ValueError(f"unknown derivative: {kind}")
+
     def _save(self, name, content):
         key = naming.zmedia_key(name)
         if key is None:
