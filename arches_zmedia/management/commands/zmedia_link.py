@@ -72,7 +72,7 @@ class Command(BaseCommand):
                                 "graph": str(image.graph_id)})
             # has_image: an image tile we did not write, or ours edited since (our own unedited tile does not count)
             dos = [link.Do(rid, ident, name, link.has_foreign_image(rid, tiles, cfg["ORG"], spec),
-                           link.image_tileid(rid) in tiles)
+                           link.has_our_tile(rid, tiles))
                    for rid, ident, name, tiles in c.fetchall()]
         pairs, unmatched = link.match(dos, inventory, pattern, partial=bool(since))
         os.makedirs(out, exist_ok=True)
