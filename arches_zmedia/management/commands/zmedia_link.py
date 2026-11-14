@@ -35,7 +35,8 @@ SELECT ri.resourceinstanceid::text,
               WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.tiledata ? %(name)s
                 AND COALESCE(v->>'value', '') <> '' ORDER BY 1),
        (SELECT COALESCE(jsonb_object_agg(t.tileid::text, t.tiledata->%(image)s), '{{}}'::jsonb)
-          FROM tiles t WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.nodegroupid = %(image_ng)s::uuid)
+          FROM tiles t WHERE t.resourceinstanceid = ri.resourceinstanceid AND t.nodegroupid = %(image_ng)s::uuid),
+       to_char(ri.createdtime AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
   FROM resource_instances ri
  WHERE ri.graphid = %(graph)s::uuid
  ORDER BY 1
@@ -74,8 +75,8 @@ class Command(BaseCommand):
                                 "graph": str(image.graph_id)})
             # has_image: an image tile we did not write, or ours edited since (our own unedited tile does not count)
             dos = [link.Do(rid, ident, tuple(names or ()), link.has_foreign_image(rid, tiles, cfg["ORG"], spec),
-                           link.has_our_tile(rid, tiles))
-                   for rid, ident, names, tiles in c.fetchall()]
+                           link.has_our_tile(rid, tiles), created)
+                   for rid, ident, names, tiles, created in c.fetchall()]
         pairs, unmatched = link.match(dos, inventory, pattern, partial=bool(since))
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "link.jsonl"), "w") as f:
