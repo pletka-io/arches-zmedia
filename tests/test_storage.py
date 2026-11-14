@@ -81,3 +81,26 @@ def test_delete_keeps_the_original(tmp_path):
     st.save("zmedia/image/x.jpg", ContentFile(b"jpeg"))
     st.delete("zmedia/image/x.jpg")
     assert "/cg/image/x.jpg" in fake.files
+
+
+def test_derivative_url_thumbnail_any_size(tmp_path):
+    st, _ = make(tmp_path)
+    assert st.derivative_url("zmedia/digital_object/000001_DSC 0284.JPG", "thumbnail", 300) == (
+        "https://media.example/thumbnail/cg/digital_object/000001_DSC%200284.JPG/300"
+    )
+
+
+def test_derivative_url_iiif_encodes_tilde_and_slash(tmp_path):
+    st, _ = make(tmp_path)
+    assert st.derivative_url("zmedia/do/a~b c.jpg", "iiif") == "https://media.example/iiif/3/cg~do~a%7Eb%20c.jpg"
+    assert st.derivative_url("zmedia/do/sub/x.jpg", "iiif") == "https://media.example/iiif/3/cg~do~sub%2Fx.jpg"
+
+
+def test_derivative_url_refuses_unknown_kind_and_legacy_names(tmp_path):
+    st, _ = make(tmp_path)
+    with pytest.raises(ValueError):
+        st.derivative_url("zmedia/do/a.jpg", "deepzoom")
+    with pytest.raises(ValueError):
+        st.derivative_url("uploadedfiles/a.jpg", "thumbnail", 300)
+    with pytest.raises(ValueError):
+        st.derivative_url("zmedia/do/a.jpg", "thumbnail")  # thumbnail needs a size

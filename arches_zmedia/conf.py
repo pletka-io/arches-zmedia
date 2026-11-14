@@ -14,6 +14,9 @@ def settings(org, etc="/etc/arches"):
             "ORG": org,
             "BASE_URL": "https://media.delving.org",
             "SIZE": 1000,  # zmedia's max_size; deepzoom serves more
+            "THUMB_SIZE": 300,
+            "SIZES": [100, 300, 500, 1000],
+            "INVENTORY_TOKEN_FILE": f"{etc}/{org}/zmedia-inventory.token",
             "SFTP_HOST": "upload.media.delving.org",
             "SFTP_PORT": 2222,
             "KEY_FILE": key,
