@@ -39,9 +39,15 @@ def file_id(org, spec, rel):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"zmedia:{org}/{spec}/{rel}"))
 
 
+def _json(value):
+    """Django has psycopg return json/jsonb columns as str; accept that or the parsed value."""
+    return json.loads(value) if isinstance(value, str) else value
+
+
 def _is_our_value(value, org, spec):
     """Every file in the image node is one zmedia_link would write (a UI edit adds or changes one)."""
     prefix = f"zmedia/{spec}/"
+    value = _json(value)
     for f in value or []:
         path = f.get("path") if isinstance(f, dict) else None
         if not path or not path.startswith(prefix) or f.get("file_id") != file_id(org, spec, path[len(prefix):]):
@@ -53,7 +59,11 @@ def has_foreign_image(resourceid, tiles, org, spec):
     """True when the resource has an image tile zmedia_link did not write, or our tile was
     edited since. tiles: {tileid: the image node's value in that tile}."""
     ours = image_tileid(resourceid)
-    return any(t != ours or not _is_our_value(v, org, spec) for t, v in tiles.items())
+    return any(t != ours or not _is_our_value(v, org, spec) for t, v in (_json(tiles) or {}).items())
+
+
+def has_our_tile(resourceid, tiles):
+    return image_tileid(resourceid) in (_json(tiles) or {})
 
 
 def match(dos, inventory, pattern, partial=False):
