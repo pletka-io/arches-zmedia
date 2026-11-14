@@ -4,8 +4,8 @@ import json
 import uuid
 from collections import namedtuple
 
-# has_image: an image tile zmedia_link did not write; has_ours: the tile it did write
-Do = namedtuple("Do", "resourceid identifier names has_image has_ours", defaults=(False,))
+# has_image: an image tile zmedia_link did not write; has_ours: the tile it did write; created: ISO 8601 text
+Do = namedtuple("Do", "resourceid identifier names has_image has_ours created", defaults=(False, None))
 IMAGE_RENDERER = "5e05aa2e-5db0-4922-8938-b4d2b7919733"
 
 
@@ -115,8 +115,11 @@ def file_value(org, spec, row):
 def image_line(do, graphid, nodegroupid, nodeid, value):
     """One loader JSONL line: the resource with only its image tile (load with delta_sync('tile'))."""
     tileid = image_tileid(do.resourceid)
-    return json.dumps({
+    line = {
         "resourceInstanceID": do.resourceid, "graphID": graphid,
         "tiles": [{"tileid": tileid, "nodegroup_id": nodegroupid, "parenttile_id": None, "sortorder": 0,
                    "data": {nodeid: [value] if value else []}}],
-    }, sort_keys=True)
+    }
+    if do.created:  # the staging import requires it (NOT NULL); tile mode never uses it for existing resources
+        line["createdTime"] = do.created
+    return json.dumps(line, sort_keys=True)

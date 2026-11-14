@@ -179,3 +179,13 @@ def test_candidate_order_is_deterministic(tmp_path):
         pairs, _ = match([Do("11111111-1111-1111-1111-111111111111", "1", names, False)], INV, P)
         return [image_line(d, "g", "ng", "n", file_value("gap", "digital_object", row)) for d, row in pairs]
     assert run() == run() != []
+
+
+def test_image_line_writes_created_time_when_known():
+    do = Do(str(uuid.uuid4()), "X", ("a",), False, False, "2024-05-06T07:08:09.123456Z")
+    assert json.loads(image_line(do, "g", "ng", "n", None))["createdTime"] == "2024-05-06T07:08:09.123456Z"
+
+
+def test_image_line_omits_created_time_when_unknown():
+    do = Do(str(uuid.uuid4()), "X", ("a",), False, False)
+    assert "createdTime" not in json.loads(image_line(do, "g", "ng", "n", None))
