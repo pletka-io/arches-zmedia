@@ -1,8 +1,8 @@
 # Common Ground: a Digital Object per image, shown on the records it depicts
 
 Date: 2026-11-14
-Status: draft, for review (revision 2: generator in the workbench, files under
-`digital_object/` on zmedia)
+Status: draft, for review (revision 3: generator and GAP linker in the
+workbench, files under `digital_object/` on zmedia)
 Builds on: `2026-11-13-gap-digital-object-images-design.md` (GAP, live 2026-11-14:
 17,855 Digital Objects linked, gallery + header on the depicted records).
 
@@ -46,6 +46,8 @@ editor; she can enrich the generated records later, in the same workbench.
 10. The workbench knows which files exist on zmedia from the inventory, pulled
     through the loader (`worktree pull`); nobody outside fleet-1 needs a dash
     token.
+11. GAP's linker (`zmedia_link`) becomes a kit command too (§6.1): one way of
+    working, in the workbench, for every instance.
 
 ## 3. Model change through Pletka
 
@@ -162,6 +164,25 @@ the first write, and fields without a counterpart are listed, not dropped.
 Lint: the coverage/lint run validates the generated resources against the
 graph like any delivery (cardinality, references, concepts).
 
+### 6.1 Linking existing Digital Objects (GAP's case), also a kit command
+
+`zmedia_link` (arches-zmedia, manage.py, used for GAP on 2026-11-14) moves into
+the kit beside the generator, on the same pulled inventory:
+
+```
+archessql worktree link digital-objects --pattern "{identifier:06d}_{name}" \
+    --identifier-node identifier_content --name-node name_content --image-node image
+```
+
+Same matching rules as `zmedia_link` (every name value tried, names with a
+slash refused, unmatched files and objects reported), but it writes the
+`image` values into the worktree's Digital Object resources and a report,
+instead of a JSONL file in the pod; loading is `worktree push --from-report`.
+Acceptance: run on gap-data, the result equals what GAP holds now (17,855
+linked, the 302 of B32 unmatched), so the pushed preview is empty. Then
+`zmedia_link` is removed from arches-zmedia (a major-version note in its
+changelog), which keeps only the storage backend and the report config.
+
 ## 7. Load and display, per step
 
 1. §5 links for the model; zmedia ingest done (inventory count = files).
@@ -202,14 +223,17 @@ passed through.
 IIIF manifests per record; the data editor enriching generated Digital
 Objects; removing the records' original file entries and pruning the old
 zmedia folders; retiring the `image` model (after its conversion is checked);
-an Arches draft route for graph push; uploads into `digital_object/` from the
-Arches editor (the storage backend files a new upload under the tile's model,
-GAP-style naming for new uploads is its own change).
+an Arches draft route for graph push; GAP-style names (`<identifier>_<name>`)
+for new uploads.
+
+Uploads need no change: arches-zmedia files an upload under the slug of the
+model it is made on, so an image uploaded on a Digital Object's `image` node
+already lands in `commonground/digital_object/` (as on GAP). Only uploads on
+a record's own file-list node (archival object etc.) go to that model's
+folder; those nodes go when the old entries are removed.
 
 ## 10. Open
 
 - Gate 3.0 outcome decides whether the id mapping work comes first.
 - `depicts_*` for models not in the list (sample, group, layer) if files turn
   up there.
-- Where the GAP linker (`zmedia_link`, manage.py) ends up: it could become a
-  workbench command on the same inventory route, for one way of working.
